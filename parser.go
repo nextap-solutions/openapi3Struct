@@ -1,0 +1,144 @@
+package parser
+
+import (
+	"bytes"
+	"context"
+	"go/ast"
+	"os"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/itchyny/json2yaml"
+	"golang.org/x/tools/go/packages"
+)
+
+const (
+	openapiSchemaDecoration = "oapi:schema"
+)
+
+type Path struct {
+	Path string
+	Item openapi3.PathItem
+}
+
+type Parser struct {
+	T           openapi3.T
+	packagePath string
+	paths       []Path
+}
+
+type Option func(p Parser) Parser
+
+func NewParser(t openapi3.T, options ...Option) *Parser {
+	p := Parser{
+		T: t,
+	}
+	for _, option := range options {
+		p = option(p)
+	}
+
+	return &p
+}
+
+func WithPackagePath(path string) Option {
+	return func(p Parser) Parser {
+		p.packagePath = path
+		return p
+	}
+}
+
+func (p *Parser) AddPath(path Path) {
+	if p.T.Paths == nil {
+		p.T.Paths = openapi3.Paths{}
+	}
+	p.T.Paths[path.Path] = &path.Item
+}
+
+func (p *Parser) SaveYamlToFile(path string) error {
+	json, err := p.T.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	result := bytes.NewBuffer([]byte{})
+	err = json2yaml.Convert(result, bytes.NewBuffer(json))
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, result.Bytes(), 0644)
+}
+
+func (p *Parser) SaveJsonToFile(path string) error {
+	json, err := p.T.MarshalJSON()
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, json, 0644)
+}
+
+// Validate resolves refs and validates schema
+func (p *Parser) Validate(ctx context.Context) error {
+	openapi3.NewLoader().ResolveRefsIn(&p.T, nil)
+
+	err := p.T.Validate(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Parser) ParseSchemasFromStructs() error {
+	cfg := &packages.Config{Mode: packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes}
+	pkgs, err := packages.Load(cfg, p.packagePath)
+	if err != nil {
+		return err
+	}
+	if packages.PrintErrors(pkgs) > 0 {
+		return err
+	}
+	schemas := walkPackageAndResolveSchemas(pkgs)
+	p.T.Components.Schemas = schemas
+
+	return nil
+}
+
+func walkPackageAndResolveSchemas(pkgs []*packages.Package) openapi3.Schemas {
+	schemas := openapi3.Schemas{}
+	for _, pkg := range pkgs {
+		for _, f := range pkg.Syntax {
+			// fmt.Printf("File %s\n", f.Name)
+			for _, v := range f.Decls {
+				// fmt.Printf("V %T\n", v)
+				switch decl := v.(type) {
+				case *ast.FuncDecl:
+					// fmt.Printf("FuncDecl %s %v\n", decl.Name.Name, decl.Doc)
+					break
+				case *ast.GenDecl:
+					// if !strings.Contains(decl.Doc.Text(), openapiSchemaDecoration) {
+					// 	continue
+					// }
+					for _, s := range decl.Specs {
+						doc := ""
+						if decl.Doc != nil {
+							doc = decl.Doc.Text()
+						}
+						name, schema := resolveSchema(schemas, s, doc)
+						if name != nil {
+							schemas[*name] = openapi3.NewSchemaRef("", &schema)
+						}
+					}
+
+					break
+				case *ast.BadDecl:
+					// fmt.Printf("BadDeclypeSpec\n")
+					break
+				default:
+					// fmt.Printf("Unknown %T\n", decl)
+					break
+				}
+			}
+		}
+	}
+	return schemas
+}
