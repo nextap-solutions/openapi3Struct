@@ -156,7 +156,9 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr) (*openap
 	switch ft := typ.(type) {
 	case *ast.MapType:
 		// TODO is this default required correct ?
-		return openapi3.NewSchemaRef("", &openapi3.Schema{}), true
+		return openapi3.NewSchemaRef("", &openapi3.Schema{
+			Type: "object",
+		}), true
 	// TODO improve, we cannot handle array of arrays now
 	case *ast.ArrayType:
 		el := ft.Elt
