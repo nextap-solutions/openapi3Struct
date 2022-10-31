@@ -1,4 +1,4 @@
-package parser
+package openapi3Struct
 
 import (
 	"bytes"
