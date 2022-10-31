@@ -1,4 +1,4 @@
-module openapi3Struct
+module github.com/nextap-solutions/openapi3Struct
 
 go 1.19
 
