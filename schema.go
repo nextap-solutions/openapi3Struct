@@ -48,7 +48,10 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 
 						// Handle oapi tag
 						if strings.HasPrefix(match[1], "oapi") {
-							updateSchemAttribute(fieldSchema, match[0])
+							requiredAttr := updateSchemAttribute(fieldSchema, match[0])
+							if requiredAttr {
+								required = true
+							}
 						}
 					}
 				}
@@ -56,7 +59,10 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				if f.Doc != nil {
 					for _, line := range strings.Split(f.Doc.Text(), "\n") {
 						if strings.HasPrefix(line, "oapi") {
-							updateSchemAttribute(fieldSchema, line)
+							requiredAttr := updateSchemAttribute(fieldSchema, line)
+							if requiredAttr {
+								required = true
+							}
 						}
 					}
 				}
@@ -80,7 +86,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 	return nil, schema
 }
 
-func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) {
+func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) bool {
 	fullMatch := tagReqexp.FindAllStringSubmatch(keyValue, -1)
 	if len(fullMatch) != 1 {
 		// TODO handle error
@@ -93,6 +99,13 @@ func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) {
 	attrName := attrs[1]
 	attrName = strings.ToUpper(string(attrs[1][0])) + string(attrName[1:])
 	// fmt.Printf("Setitng %s to %s\n", attrName, match[2])
+	if attrName == "Required" {
+		if match[2] == "true" {
+			return true
+		}
+
+		return false
+	}
 
 	rfValue := reflect.ValueOf(fieldSchema.Value).Elem()
 	fv := rfValue.FieldByName(attrName)
@@ -154,6 +167,8 @@ func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) {
 	}
 	updatedSchema := rfValue.Interface().(openapi3.Schema)
 	fieldSchema.Value = &updatedSchema
+
+	return false
 }
 
 func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr) (*openapi3.SchemaRef, bool) {
