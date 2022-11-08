@@ -11,8 +11,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// See https://regex101.com/r/TCocnq/1
-var tagReqexp = regexp.MustCompile(`([^  \x60][a-zA-z0-9_-]+):"? ?([ a-zA-z0-9_-]+)"? ?`)
+// See https://regex101.com/r/wWF0jj/1
+var tagReqexp = regexp.MustCompile(`([^  \x60\n][a-zA-z0-9_-]+):"? ?([ a-zA-z0-9,_-]+)"? ?`)
 
 func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, openapi3.Schema) {
 	schema := openapi3.Schema{
@@ -137,6 +137,13 @@ func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) {
 		} else {
 			fv.Set(reflect.ValueOf(uint))
 		}
+	case "[]interface {}":
+		values := strings.Split(match[2], ",")
+		anyValues := make([]any, len(values))
+		for i, v := range values {
+			anyValues[i] = strings.TrimSpace(v)
+		}
+		fv.Set(reflect.ValueOf(anyValues))
 	default:
 		if pointer {
 			fv.Set(reflect.ValueOf(&match[2]))
@@ -156,6 +163,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr) (*openap
 	switch ft := typ.(type) {
 	case *ast.MapType:
 		// TODO is this default required correct ?
+		required = false
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
 			Type: "object",
 		}), true
