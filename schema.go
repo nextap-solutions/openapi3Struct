@@ -11,8 +11,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// See https://regex101.com/r/wWF0jj/1
-var tagReqexp = regexp.MustCompile(`([^  \x60\n][a-zA-z0-9_-]+):"? ?([ a-zA-z0-9,_-]+)"? ?`)
+// See https://regex101.com/r/8SGj7m/1
+var tagReqexp = regexp.MustCompile(`([^  \x60\n][a-zA-z0-9_-]+):"? ?([ a-zA-z0-9{},_-]+)"? ?`)
 
 func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, openapi3.Schema) {
 	schema := openapi3.Schema{
@@ -31,6 +31,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 			}
 			fiels := openapi3.Schemas{}
 			for _, f := range st.Fields.List {
+				// fmt.Printf("",f.Type)
 				name := f.Names[0].Name
 				fieldSchema, required := resolveField(schemas, f, f.Type)
 
