@@ -24,7 +24,7 @@ type Path struct {
 
 type Parser struct {
 	T           openapi3.T
-	packagePath string
+	packagePath []string
 	paths       []Path
 }
 
@@ -41,9 +41,9 @@ func NewParser(t openapi3.T, options ...Option) *Parser {
 	return &p
 }
 
-func WithPackagePath(path string) Option {
+func WithPackagePaths(paths []string) Option {
 	return func(p Parser) Parser {
-		p.packagePath = path
+		p.packagePath = paths
 		return p
 	}
 }
@@ -92,7 +92,7 @@ func (p *Parser) Validate(ctx context.Context) error {
 
 func (p *Parser) ParseSchemasFromStructs() error {
 	cfg := &packages.Config{Mode: packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes}
-	pkgs, err := packages.Load(cfg, p.packagePath)
+	pkgs, err := packages.Load(cfg, p.packagePath...)
 	if err != nil {
 		return err
 	}
