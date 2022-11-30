@@ -5,6 +5,7 @@ import (
 	"context"
 	"go/ast"
 	"os"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/itchyny/json2yaml"
@@ -13,6 +14,7 @@ import (
 
 const (
 	openapiSchemaDecoration = "oapi:schema"
+	swaggerSchemaDecoration = "swagger:model"
 )
 
 type Path struct {
@@ -115,9 +117,9 @@ func walkPackageAndResolveSchemas(pkgs []*packages.Package) openapi3.Schemas {
 					// fmt.Printf("FuncDecl %s %v\n", decl.Name.Name, decl.Doc)
 					break
 				case *ast.GenDecl:
-					// if !strings.Contains(decl.Doc.Text(), openapiSchemaDecoration) {
-					// 	continue
-					// }
+					if !strings.Contains(decl.Doc.Text(), openapiSchemaDecoration) && !strings.Contains(decl.Doc.Text(), swaggerSchemaDecoration) {
+						continue
+					}
 					for _, s := range decl.Specs {
 						doc := ""
 						if decl.Doc != nil {
