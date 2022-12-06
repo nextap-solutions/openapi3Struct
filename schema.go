@@ -152,12 +152,16 @@ func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) bool
 			fv.Set(reflect.ValueOf(uint))
 		}
 	case "[]interface {}":
-		values := strings.Split(match[2], ",")
-		anyValues := make([]any, len(values))
-		for i, v := range values {
-			anyValues[i] = strings.TrimSpace(v)
+		newValue := []any{}
+		currentValue, ok := fv.Interface().([]any)
+		if ok {
+			newValue = append(newValue, currentValue...)
 		}
-		fv.Set(reflect.ValueOf(anyValues))
+		values := strings.Split(match[2], ",")
+		for _, v := range values {
+			newValue = append(newValue, strings.TrimSpace(v))
+		}
+		fv.Set(reflect.ValueOf(newValue))
 	default:
 		if pointer {
 			fv.Set(reflect.ValueOf(&match[2]))
