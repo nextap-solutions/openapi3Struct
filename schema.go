@@ -29,10 +29,17 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 			schema := openapi3.Schema{
 				Type: "object",
 			}
+			containsOneOf := false
+			containsAllOf := false
 			fiels := openapi3.Schemas{}
 			for _, f := range st.Fields.List {
-				// fmt.Printf("",f.Type)
-				name := f.Names[0].Name
+				oneOf := false
+				allOf := false
+
+				name := ""
+				if len(f.Names) != 0 {
+					name = f.Names[0].Name
+				}
 				fieldSchema, required := resolveField(schemas, f, f.Type)
 
 				if f.Tag != nil {
@@ -57,9 +64,21 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 					}
 				}
 
+				if f.Comment != nil {
+					// fmt.Printf("Comment %s\n", f.Comment.Text())
+				}
+
 				if f.Doc != nil {
 					for _, line := range strings.Split(f.Doc.Text(), "\n") {
 						if strings.HasPrefix(line, "oapi") {
+							if line == "oapi_oneOf" {
+								oneOf = true
+								continue
+							}
+							if line == "oapi_any" {
+								allOf = true
+								continue
+							}
 							requiredAttr := updateSchemAttribute(fieldSchema, line)
 							if requiredAttr {
 								required = true
@@ -67,14 +86,40 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 						}
 					}
 				}
+				if name == "" && !oneOf {
+					allOf = true
+				}
 
-				fiels[name] = fieldSchema
-				if required {
-					schema.Required = append(schema.Required, name)
+				if name != "" {
+					fiels[name] = fieldSchema
+					if required {
+						schema.Required = append(schema.Required, name)
+					}
+					continue
+				}
+				if oneOf {
+					schema.OneOf = append(schema.OneOf, fieldSchema)
+					containsOneOf = true
+				}
+				if allOf {
+					schema.AllOf = append(schema.AllOf, fieldSchema)
+					containsOneOf = true
 				}
 			}
 
-			schema.Properties = fiels
+			if containsOneOf {
+				schema.OneOf = append(schema.OneOf, openapi3.NewSchemaRef("", &openapi3.Schema{
+					Type:       "object",
+					Properties: fiels,
+				}))
+			} else if containsAllOf {
+				schema.AllOf = append(schema.AllOf, openapi3.NewSchemaRef("", &openapi3.Schema{
+					Type:       "object",
+					Properties: fiels,
+				}))
+			} else {
+				schema.Properties = fiels
+			}
 			return &s.Name.Name, schema
 		default:
 			// fmt.Printf("default %s %s %s\n", s.Name.Name, s.Doc.Text(), s.Comment.Text())
