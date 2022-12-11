@@ -75,7 +75,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 								oneOf = true
 								continue
 							}
-							if line == "oapi_any" {
+							if line == "oapi_allOf" {
 								allOf = true
 								continue
 							}
@@ -103,20 +103,24 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				}
 				if allOf {
 					schema.AllOf = append(schema.AllOf, fieldSchema)
-					containsOneOf = true
+					containsAllOf = true
 				}
 			}
 
 			if containsOneOf {
-				schema.OneOf = append(schema.OneOf, openapi3.NewSchemaRef("", &openapi3.Schema{
-					Type:       "object",
-					Properties: fiels,
-				}))
+				if len(fiels) != 0 {
+					schema.OneOf = append(schema.OneOf, openapi3.NewSchemaRef("", &openapi3.Schema{
+						Type:       "object",
+						Properties: fiels,
+					}))
+				}
 			} else if containsAllOf {
-				schema.AllOf = append(schema.AllOf, openapi3.NewSchemaRef("", &openapi3.Schema{
-					Type:       "object",
-					Properties: fiels,
-				}))
+				if len(fiels) != 0 {
+					schema.AllOf = append(schema.AllOf, openapi3.NewSchemaRef("", &openapi3.Schema{
+						Type:       "object",
+						Properties: fiels,
+					}))
+				}
 			} else {
 				schema.Properties = fiels
 			}
