@@ -160,7 +160,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 					}
 					discriminator.Mapping = mapping
 				}
-				if discriminatorParser == "snake" {
+				if discriminatorParser == "upperSnake" {
 					if discriminator.Mapping != nil {
 						parsedMapping := map[string]string{}
 						for key, value := range discriminator.Mapping {
