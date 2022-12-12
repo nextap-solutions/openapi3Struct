@@ -18,6 +18,25 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 	schema := openapi3.Schema{
 		Required: []string{},
 	}
+	discriminatorPropertyName := ""
+	discriminatorParsed := ""
+	discriminatorParser := ""
+	if strings.Contains(doc, "oapi_discriminator") {
+		for _, line := range strings.Split(doc, "\n") {
+			matches := tagReqexp.FindAllStringSubmatch(line, -1)
+			for _, match := range matches {
+				if match[1] == "oapi_discriminator" {
+					discriminatorPropertyName = match[2]
+				}
+				if match[1] == "oapi_discriminator_mapped_parser" {
+					discriminatorParser = match[2]
+				}
+				if match[1] == "oapi_discriminator_mapped_parsed" {
+					discriminatorParsed = match[2]
+				}
+			}
+		}
+	}
 	// fmt.Printf("resolveSchema %T\n", s)
 	switch s := s.(type) {
 	case *ast.TypeSpec:
@@ -123,6 +142,35 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				}
 			} else {
 				schema.Properties = fiels
+			}
+			if discriminatorPropertyName != "" {
+				discriminator := openapi3.Discriminator{
+					PropertyName: discriminatorPropertyName,
+				}
+				if discriminatorParsed != "" {
+					mapping := map[string]string{}
+					if discriminatorParsed == "oneOf" {
+						for _, s := range schema.OneOf {
+							if s.Ref != "" {
+								parts := strings.Split(s.Ref, "/")
+								key := parts[len(parts)-1]
+								mapping[key] = s.Ref
+							}
+						}
+					}
+					discriminator.Mapping = mapping
+				}
+				if discriminatorParser == "snake" {
+					if discriminator.Mapping != nil {
+						parsedMapping := map[string]string{}
+						for key, value := range discriminator.Mapping {
+							parsedMapping[toSnakeUpperCase(key)] = value
+						}
+
+						discriminator.Mapping = parsedMapping
+					}
+				}
+				schema.Discriminator = &discriminator
 			}
 			return &s.Name.Name, schema
 		default:
@@ -304,4 +352,14 @@ func resolvePrimitiveType(typ string) string {
 
 func createRef(typeName string) string {
 	return fmt.Sprintf("#/components/schemas/%s", typeName)
+}
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
+
+func toSnakeUpperCase(str string) string {
+	snake := matchAllCap.ReplaceAllString(str, "${1}_${2}")
+	return snake
 }
