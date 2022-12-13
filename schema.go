@@ -70,7 +70,9 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 							continue
 						}
 						if match[1] == "json" {
-							name = match[2]
+							// we only want the first part, it can contain things like "omitempty" and we want to ignore these
+							split := strings.Split(match[2], ",")
+							name = split[0]
 						}
 
 						// Handle oapi tag
