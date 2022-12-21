@@ -302,7 +302,14 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr) (*openap
 	case *ast.StarExpr:
 		required = false
 		typ = ft.X
+	// TODO parse packages
+	case *ast.SelectorExpr:
+		// fmt.Printf("SelectorExpr %s %v\n", ft.Sel.Name, f.Names)
+		return openapi3.NewSchemaRef("", &openapi3.Schema{
+			Type: "object",
+		}), false
 	}
+
 	ident := typ.(*ast.Ident)
 
 	if ident.Obj != nil {
@@ -347,8 +354,9 @@ func resolvePrimitiveType(typ string) string {
 		return "string"
 	case "bool":
 		return "boolean"
+	// TODO parse type alias better
 	default:
-		return typ
+		return "object"
 	}
 }
 
