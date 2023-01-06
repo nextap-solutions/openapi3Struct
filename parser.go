@@ -52,7 +52,19 @@ func (p *Parser) AddPath(path Path) {
 	if p.T.Paths == nil {
 		p.T.Paths = openapi3.Paths{}
 	}
-	p.T.Paths[path.Path] = &path.Item
+	if p.T.Paths[path.Path] == nil {
+		p.T.Paths[path.Path] = &path.Item
+		return
+	}
+	if path.Item.Delete != nil {
+		p.T.Paths[path.Path].Delete = path.Item.Delete
+	}
+	if path.Item.Post != nil {
+		p.T.Paths[path.Path].Post = path.Item.Post
+	}
+	if path.Item.Get != nil {
+		p.T.Paths[path.Path].Get = path.Item.Get
+	}
 }
 
 func (p *Parser) SaveYamlToFile(path string) error {
