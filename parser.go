@@ -52,6 +52,7 @@ func (p *Parser) AddPath(path Path) {
 	if p.T.Paths == nil {
 		p.T.Paths = openapi3.Paths{}
 	}
+	//TODO improve this to add checks for all kinds of optional fields
 	if p.T.Paths[path.Path] == nil {
 		p.T.Paths[path.Path] = &path.Item
 		return
