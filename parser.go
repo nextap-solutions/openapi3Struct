@@ -66,6 +66,9 @@ func (p *Parser) AddPath(path Path) {
 	if path.Item.Get != nil {
 		p.T.Paths[path.Path].Get = path.Item.Get
 	}
+	if path.Item.Put != nil {
+		p.T.Paths[path.Path].Put = path.Item.Put
+	}
 }
 
 func (p *Parser) SaveYamlToFile(path string) error {
@@ -138,6 +141,7 @@ func walkPackageAndResolveSchemas(pkgs []*packages.Package) openapi3.Schemas {
 						if decl.Doc != nil {
 							doc = decl.Doc.Text()
 						}
+						//TODO: add schema renaming
 						name, schema := resolveSchema(schemas, s, doc)
 						if name != nil {
 							schemas[*name] = openapi3.NewSchemaRef("", &schema)
