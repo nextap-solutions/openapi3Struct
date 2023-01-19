@@ -97,9 +97,13 @@ func (p *Parser) SaveJsonToFile(path string) error {
 
 // Validate resolves refs and validates schema
 func (p *Parser) Validate(ctx context.Context) error {
-	openapi3.NewLoader().ResolveRefsIn(&p.T, nil)
+	loader := openapi3.NewLoader()
+	err := loader.ResolveRefsIn(&p.T, nil)
+	if err != nil {
+		return err
+	}
 
-	err := p.T.Validate(ctx)
+	err = p.T.Validate(ctx)
 	if err != nil {
 		return err
 	}
@@ -116,11 +120,16 @@ func (p *Parser) ParseSchemasFromStructs() error {
 	if packages.PrintErrors(pkgs) > 0 {
 		return err
 	}
+	if p.T.Components.Schemas == nil {
+		p.T.Components.Schemas = openapi3.Schemas{}
+	}
+
 	schemas := walkPackageAndResolveSchemas(pkgs)
 	for name, schema := range schemas {
 		if _, ok := p.T.Components.Schemas[name]; ok {
 			return fmt.Errorf("Generated schema conflict Name=%s", name)
 		}
+
 		p.T.Components.Schemas[name] = schema
 	}
 
