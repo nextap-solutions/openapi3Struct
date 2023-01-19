@@ -3,6 +3,7 @@ package openapi3Struct
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"go/ast"
 	"os"
 	"strings"
@@ -52,7 +53,7 @@ func (p *Parser) AddPath(path Path) {
 	if p.T.Paths == nil {
 		p.T.Paths = openapi3.Paths{}
 	}
-	//TODO improve this to add checks for all kinds of optional fields
+	// TODO improve this to add checks for all kinds of optional fields
 	if p.T.Paths[path.Path] == nil {
 		p.T.Paths[path.Path] = &path.Item
 		return
@@ -116,7 +117,12 @@ func (p *Parser) ParseSchemasFromStructs() error {
 		return err
 	}
 	schemas := walkPackageAndResolveSchemas(pkgs)
-	p.T.Components.Schemas = schemas
+	for name, schema := range schemas {
+		if _, ok := p.T.Components.Schemas[name]; ok {
+			return fmt.Errorf("Generated schema conflict Name=%s", name)
+		}
+		p.T.Components.Schemas[name] = schema
+	}
 
 	return nil
 }
@@ -141,7 +147,7 @@ func walkPackageAndResolveSchemas(pkgs []*packages.Package) openapi3.Schemas {
 						if decl.Doc != nil {
 							doc = decl.Doc.Text()
 						}
-						//TODO: add schema renaming
+						// TODO: add schema renaming
 						name, schema := resolveSchema(schemas, s, doc)
 						if name != nil {
 							schemas[*name] = openapi3.NewSchemaRef("", &schema)

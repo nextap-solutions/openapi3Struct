@@ -71,6 +71,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 						}
 						if match[1] == "json" {
 							// we only want the first part, it can contain things like "omitempty" and we want to ignore these
+							// TODO we should parse "omitempty" as optional
 							split := strings.Split(match[2], ",")
 							name = split[0]
 						}
