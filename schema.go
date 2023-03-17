@@ -53,6 +53,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 			fiels := openapi3.Schemas{}
 			for _, f := range st.Fields.List {
 				oneOf := false
+				oneOfMapping := ""
 				allOf := false
 
 				name := ""
@@ -93,8 +94,12 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				if f.Doc != nil {
 					for _, line := range strings.Split(f.Doc.Text(), "\n") {
 						if strings.HasPrefix(line, "oapi") {
-							if line == "oapi_oneOf" {
+							if strings.Contains(line, "oapi_oneOf") {
 								oneOf = true
+								if strings.Contains(line, ":") {
+									split := strings.Split(line, ":")
+									oneOfMapping = strings.Trim(split[1], " ")
+								}
 								continue
 							}
 							if line == "oapi_allOf" {
@@ -122,6 +127,16 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				if oneOf {
 					schema.OneOf = append(schema.OneOf, fieldSchema)
 					containsOneOf = true
+					if oneOfMapping != "" {
+						// TODO refactor this, it's ugly
+						if schema.Extensions == nil {
+							schema.Extensions = map[string]any{}
+						}
+						if _, ok := schema.Extensions["x-oneOf-mappings"]; !ok {
+							schema.Extensions["x-oneOf-mappings"] = map[string]string{}
+						}
+						schema.Extensions["x-oneOf-mappings"].(map[string]string)[fieldSchema.Ref] = oneOfMapping
+					}
 				}
 				if allOf {
 					schema.AllOf = append(schema.AllOf, fieldSchema)
@@ -154,6 +169,20 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 					mapping := map[string]string{}
 					if discriminatorParsed == "oneOf" {
 						for _, s := range schema.OneOf {
+							if mappings, ok := schema.Extensions["x-oneOf-mappings"]; ok {
+								// TOOD maybe add check
+								mappings := mappings.(map[string]string)
+								if oneOfMapping, ok := mappings[s.Ref]; ok {
+									if discriminatorParser != "" {
+										mapping["nomap:"+oneOfMapping] = s.Ref
+									} else {
+										mapping[oneOfMapping] = s.Ref
+									}
+
+									continue
+								}
+							}
+
 							if s.Ref != "" {
 								parts := strings.Split(s.Ref, "/")
 								key := parts[len(parts)-1]
@@ -167,6 +196,10 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 					if discriminator.Mapping != nil {
 						parsedMapping := map[string]string{}
 						for key, value := range discriminator.Mapping {
+							if strings.HasPrefix(key, "nomap:") {
+								parsedMapping[strings.TrimPrefix(key, "nomap:")] = value
+								continue
+							}
 							parsedMapping[toSnakeUpperCase(key)] = value
 						}
 
@@ -176,6 +209,11 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				schema.Discriminator = &discriminator
 			}
 			return &s.Name.Name, schema
+		case *ast.SelectorExpr:
+			fmt.Printf("default %s %T\n", s.Name.Name, st.Sel)
+			// schema := openapi3.Schema{
+			// 	Type: fmt.Sprintf("%v", s.Type.(*ast.Ident).Name),
+			// }
 		default:
 			// fmt.Printf("default %s %s %s\n", s.Name.Name, s.Doc.Text(), s.Comment.Text())
 			schema := openapi3.Schema{
@@ -188,6 +226,9 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 }
 
 func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) bool {
+	if fieldSchema.Value == nil {
+		return false
+	}
 	fullMatch := tagReqexp.FindAllStringSubmatch(keyValue, -1)
 	if len(fullMatch) != 1 {
 		// TODO handle error

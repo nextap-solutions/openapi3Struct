@@ -61,6 +61,9 @@ func (p *Parser) AddPath(path Path) {
 	if path.Item.Delete != nil {
 		p.T.Paths[path.Path].Delete = path.Item.Delete
 	}
+	if path.Item.Head != nil {
+		p.T.Paths[path.Path].Head = path.Item.Head
+	}
 	if path.Item.Post != nil {
 		p.T.Paths[path.Path].Post = path.Item.Post
 	}
