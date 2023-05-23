@@ -141,6 +141,25 @@ func (p *Parser) ParseSchemasFromStructs() error {
 
 func walkPackageAndResolveSchemas(pkgs []*packages.Package) openapi3.Schemas {
 	schemas := openapi3.Schemas{}
+	declarationmap := map[string]*ast.TypeSpec{}
+	for _, pkg := range pkgs {
+		for _, f := range pkg.Syntax {
+			for _, v := range f.Decls {
+				switch decl := v.(type) {
+				case *ast.GenDecl:
+					if !strings.Contains(decl.Doc.Text(), openapiSchemaDecoration) && !strings.Contains(decl.Doc.Text(), swaggerSchemaDecoration) {
+						continue
+					}
+					for _, s := range decl.Specs {
+						switch spec := s.(type) {
+						case *ast.TypeSpec:
+							declarationmap[spec.Name.Name] = spec
+						}
+					}
+				}
+			}
+		}
+	}
 	for _, pkg := range pkgs {
 		for _, f := range pkg.Syntax {
 			// fmt.Printf("File %s\n", f.Name)
@@ -160,12 +179,11 @@ func walkPackageAndResolveSchemas(pkgs []*packages.Package) openapi3.Schemas {
 							doc = decl.Doc.Text()
 						}
 						// TODO: add schema renaming
-						name, schema := resolveSchema(schemas, s, doc)
+						name, schema := resolveSchema(schemas, s, doc, declarationmap)
 						if name != nil {
 							schemas[*name] = openapi3.NewSchemaRef("", &schema)
 						}
 					}
-
 					break
 				case *ast.BadDecl:
 					// fmt.Printf("BadDeclypeSpec\n")

@@ -14,13 +14,15 @@ import (
 // See https://regex101.com/r/8SGj7m/1
 var tagReqexp = regexp.MustCompile(`([^  \x60\n][a-zA-z0-9_-]+):"? ?([ a-zA-z0-9{},_-]+)"? ?`)
 
-func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, openapi3.Schema) {
+func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declarationMap map[string]*ast.TypeSpec) (*string, openapi3.Schema) {
 	schema := openapi3.Schema{
 		Required: []string{},
 	}
 	discriminatorPropertyName := ""
 	discriminatorParsed := ""
 	discriminatorParser := ""
+	// fmt.Printf("s type %T values %v\n", s, s)
+
 	if strings.Contains(doc, "oapi_discriminator") {
 		for _, line := range strings.Split(doc, "\n") {
 			matches := tagReqexp.FindAllStringSubmatch(line, -1)
@@ -45,12 +47,12 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 			// fmt.Printf("FuncType\n")
 		case *ast.StructType:
 			// fmt.Printf("StructType\n")
-			schema := openapi3.Schema{
-				Type: "object",
-			}
+			// fmt.Printf("s type %T values: {%v} (%v) %s %s %s\n", s, s.Assign, s.Comment, s.Doc.Text(), s.Name, s.Type)
+			schema.Type = "object"
+
 			containsOneOf := false
 			containsAllOf := false
-			fiels := openapi3.Schemas{}
+			fields := openapi3.Schemas{}
 			for _, f := range st.Fields.List {
 				oneOf := false
 				oneOfMapping := ""
@@ -60,7 +62,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				if len(f.Names) != 0 {
 					name = f.Names[0].Name
 				}
-				fieldSchema, required := resolveField(schemas, f, f.Type)
+				fieldSchema, required := resolveField(schemas, f, f.Type, declarationMap)
 
 				if f.Tag != nil {
 					// fmt.Printf("Field %v %s\n", f.Names, f.Tag.Value)
@@ -118,7 +120,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 				}
 
 				if name != "" {
-					fiels[name] = fieldSchema
+					fields[name] = fieldSchema
 					if required {
 						schema.Required = append(schema.Required, name)
 					}
@@ -145,21 +147,21 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string) (*string, o
 			}
 
 			if containsOneOf {
-				if len(fiels) != 0 {
+				if len(fields) != 0 {
 					schema.OneOf = append(schema.OneOf, openapi3.NewSchemaRef("", &openapi3.Schema{
 						Type:       "object",
-						Properties: fiels,
+						Properties: fields,
 					}))
 				}
 			} else if containsAllOf {
-				if len(fiels) != 0 {
+				if len(fields) != 0 {
 					schema.AllOf = append(schema.AllOf, openapi3.NewSchemaRef("", &openapi3.Schema{
 						Type:       "object",
-						Properties: fiels,
+						Properties: fields,
 					}))
 				}
 			} else {
-				schema.Properties = fiels
+				schema.Properties = fields
 			}
 			if discriminatorPropertyName != "" {
 				discriminator := openapi3.Discriminator{
@@ -317,8 +319,9 @@ func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) bool
 	return false
 }
 
-func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr) (*openapi3.SchemaRef, bool) {
+func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarationMap map[string]*ast.TypeSpec) (*openapi3.SchemaRef, bool) {
 	// TODO add option to parse pointers as non optional
+	// fmt.Printf("Resolve field %v\n", f.Names)
 	required := true
 	var fieldSchema *openapi3.SchemaRef
 	switch ft := typ.(type) {
@@ -329,12 +332,13 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr) (*openap
 		}), false
 	// TODO improve, we cannot handle array of arrays now
 	case *ast.ArrayType:
+		// fmt.Printf("Array type %v\n", f.Names)
 		el := ft.Elt
 		switch at := ft.Elt.(type) {
 		case *ast.StarExpr:
 			el = at.X
 		}
-		arraySchema, _ := resolveField(schemas, f, el)
+		arraySchema, _ := resolveField(schemas, f, el, declarationMap)
 		// TODO is this default required correct ?
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
 			Items: arraySchema,
@@ -354,20 +358,42 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr) (*openap
 
 	ident := typ.(*ast.Ident)
 
-	if ident.Obj != nil {
+	Type := resolvePrimitiveType(ident.Name)
+
+	if Type == "object" {
 		doc := ""
 		if f.Doc != nil {
 			doc = f.Doc.Text()
 		}
-		name, subSchema := resolveSchema(schemas, ident.Obj.Decl.(*ast.TypeSpec), doc)
-		if name != nil {
-			fieldSchema = openapi3.NewSchemaRef(createRef(*name), nil)
+		// fmt.Printf("Ident %s %v\n", ident.Name, f.Names)
+		if ident.Obj != nil && ident.Obj.Decl != nil {
+			name, subSchema := resolveSchema(schemas, ident.Obj.Decl.(*ast.TypeSpec), doc, declarationMap)
+			if name != nil {
+				// fmt.Printf("Name %#v\	n", subSchema)
+				fieldSchema = openapi3.NewSchemaRef(createRef(*name), nil)
+			} else {
+				fieldSchema = openapi3.NewSchemaRef("", &subSchema)
+			}
 		} else {
-			fieldSchema = openapi3.NewSchemaRef("", &subSchema)
+			decl, ok := declarationMap[ident.Name]
+			if ok {
+				name, subSchema := resolveSchema(schemas, decl, doc, declarationMap)
+				if name != nil {
+					// fmt.Printf("Name %#v\	n", subSchema)
+					fieldSchema = openapi3.NewSchemaRef(createRef(*name), nil)
+				} else {
+					fieldSchema = openapi3.NewSchemaRef("", &subSchema)
+				}
+			} else {
+				// fmt.Printf("Name %s\n", ident.Name)
+				fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{
+					Type: Type,
+				})
+			}
 		}
 	} else {
 		fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{
-			Type: resolvePrimitiveType(ident.Name),
+			Type: Type,
 		})
 	}
 
