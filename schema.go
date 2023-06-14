@@ -318,10 +318,20 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 		case *ast.StarExpr:
 			el = at.X
 		}
-		arraySchema, _ := resolveField(schemas, f, el, declarationMap)
-		// TODO is this default required correct ?
+		ident := el.(*ast.Ident)
+		Type := resolvePrimitiveType(ident.Name)
+
+		//This is to prevent infinite recursion of array models
+		_, ok := declarationMap[ident.Name]
+		if ok {
+			fieldSchema = openapi3.NewSchemaRef(createRef(ident.Name), nil)
+		} else {
+			fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{
+				Type: Type,
+			})
+		}
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
-			Items: arraySchema,
+			Items: fieldSchema,
 			Type:  "array",
 		}), false
 	// TODO add option to parse pointers as non optional
