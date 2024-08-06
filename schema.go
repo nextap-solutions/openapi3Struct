@@ -43,7 +43,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 		switch st := s.Type.(type) {
 		case *ast.FuncType:
 		case *ast.StructType:
-			schema.Type = "object"
+			schema.Type = &openapi3.Types{openapi3.TypeObject}
 
 			containsOneOf := false
 			containsAllOf := false
@@ -141,14 +141,14 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 			if containsOneOf {
 				if len(fields) != 0 {
 					schema.OneOf = append(schema.OneOf, openapi3.NewSchemaRef("", &openapi3.Schema{
-						Type:       "object",
+						Type:       &openapi3.Types{openapi3.TypeObject},
 						Properties: fields,
 					}))
 				}
 			} else if containsAllOf {
 				if len(fields) != 0 {
 					schema.AllOf = append(schema.AllOf, openapi3.NewSchemaRef("", &openapi3.Schema{
-						Type:       "object",
+						Type:       &openapi3.Types{openapi3.TypeObject},
 						Properties: fields,
 					}))
 				}
@@ -206,7 +206,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 		case *ast.SelectorExpr:
 		default:
 			schema := openapi3.Schema{
-				Type: fmt.Sprintf("%v", s.Type.(*ast.Ident).Name),
+				Type: &openapi3.Types{fmt.Sprintf("%v", s.Type.(*ast.Ident).Name)},
 			}
 			return nil, schema
 		}
@@ -308,9 +308,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 	switch ft := typ.(type) {
 	case *ast.MapType:
 		// TODO is this default required correct ?
-		return openapi3.NewSchemaRef("", &openapi3.Schema{
-			Type: "object",
-		}), false
+		return openapi3.NewSchemaRef("", openapi3.NewObjectSchema()), false
 	// TODO improve, we cannot handle array of arrays now
 	case *ast.ArrayType:
 		el := ft.Elt
@@ -332,7 +330,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 		}
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
 			Items: fieldSchema,
-			Type:  "array",
+			Type:  &openapi3.Types{openapi3.TypeArray},
 		}), false
 	// TODO add option to parse pointers as non optional
 	case *ast.StarExpr:
@@ -341,7 +339,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 	// TODO parse packages
 	case *ast.SelectorExpr:
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
-			Type: "object",
+			Type: &openapi3.Types{openapi3.TypeObject},
 		}), false
 	}
 
@@ -349,7 +347,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 
 	Type := resolvePrimitiveType(ident.Name)
 
-	if Type == "object" {
+	if Type.Is(openapi3.TypeObject) {
 		doc := ""
 		if f.Doc != nil {
 			doc = f.Doc.Text()
@@ -397,19 +395,19 @@ func resolvePrimitive(f *ast.Field) (string, *openapi3.Schema) {
 	return f.Names[0].Name, &schema
 }
 
-func resolvePrimitiveType(typ string) string {
+func resolvePrimitiveType(typ string) *openapi3.Types {
 	switch typ {
 	case "int64", "int32", "int":
-		return "integer"
+		return openapi3.NewIntegerSchema().Type
 	case "float64", "float32", "float":
-		return "number"
+		return openapi3.NewFloat64Schema().Type
 	case "string", "byte":
-		return "string"
+		return openapi3.NewStringSchema().Type
 	case "bool":
-		return "boolean"
+		return openapi3.NewBoolSchema().Type
 	// TODO parse type alias better
 	default:
-		return "object"
+		return openapi3.NewObjectSchema().Type
 	}
 }
 
