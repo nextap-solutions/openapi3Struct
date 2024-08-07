@@ -51,28 +51,33 @@ func WithPackagePaths(paths []string) Option {
 
 func (p *Parser) AddPath(path Path) {
 	if p.T.Paths == nil {
-		p.T.Paths = openapi3.Paths{}
+		p.T.Paths = &openapi3.Paths{}
 	}
 	// TODO improve this to add checks for all kinds of optional fields
-	if p.T.Paths[path.Path] == nil {
-		p.T.Paths[path.Path] = &path.Item
+	storedPath := p.T.Paths.Value(path.Path)
+
+	if storedPath == nil {
+		p.T.Paths.Set(path.Path, &path.Item)
 		return
 	}
+
 	if path.Item.Delete != nil {
-		p.T.Paths[path.Path].Delete = path.Item.Delete
+		storedPath.Delete = path.Item.Delete
 	}
 	if path.Item.Head != nil {
-		p.T.Paths[path.Path].Head = path.Item.Head
+		storedPath.Head = path.Item.Head
 	}
 	if path.Item.Post != nil {
-		p.T.Paths[path.Path].Post = path.Item.Post
+		storedPath.Post = path.Item.Post
 	}
 	if path.Item.Get != nil {
-		p.T.Paths[path.Path].Get = path.Item.Get
+		storedPath.Get = path.Item.Get
 	}
 	if path.Item.Put != nil {
-		p.T.Paths[path.Path].Put = path.Item.Put
+		storedPath.Put = path.Item.Put
 	}
+
+	p.T.Paths.Set(path.Path, storedPath)
 }
 
 func (p *Parser) SaveYamlToFile(path string) error {
