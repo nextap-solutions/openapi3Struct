@@ -43,7 +43,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 		switch st := s.Type.(type) {
 		case *ast.FuncType:
 		case *ast.StructType:
-			schema.Type = "object"
+			schema.Type = &openapi3.Types{"object"}
 
 			containsOneOf := false
 			containsAllOf := false
@@ -74,7 +74,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 
 						// Handle oapi tag
 						if strings.HasPrefix(match[1], "oapi") {
-							requiredAttr := updateSchemAttribute(fieldSchema, match[0])
+							requiredAttr := updateSchemaAttribute(fieldSchema, match[0])
 							if requiredAttr {
 								required = true
 							}
@@ -100,7 +100,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 								allOf = true
 								continue
 							}
-							requiredAttr := updateSchemAttribute(fieldSchema, line)
+							requiredAttr := updateSchemaAttribute(fieldSchema, line)
 							if requiredAttr {
 								required = true
 							}
@@ -141,14 +141,14 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 			if containsOneOf {
 				if len(fields) != 0 {
 					schema.OneOf = append(schema.OneOf, openapi3.NewSchemaRef("", &openapi3.Schema{
-						Type:       "object",
+						Type:       &openapi3.Types{"object"},
 						Properties: fields,
 					}))
 				}
 			} else if containsAllOf {
 				if len(fields) != 0 {
 					schema.AllOf = append(schema.AllOf, openapi3.NewSchemaRef("", &openapi3.Schema{
-						Type:       "object",
+						Type:       &openapi3.Types{"object"},
 						Properties: fields,
 					}))
 				}
@@ -164,7 +164,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 					if discriminatorParsed == "oneOf" {
 						for _, s := range schema.OneOf {
 							if mappings, ok := schema.Extensions["x-oneOf-mappings"]; ok {
-								// TOOD maybe add check
+								// TODO maybe add check
 								mappings := mappings.(map[string]string)
 								if oneOfMapping, ok := mappings[s.Ref]; ok {
 									if discriminatorParser != "" {
@@ -206,7 +206,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 		case *ast.SelectorExpr:
 		default:
 			schema := openapi3.Schema{
-				Type: fmt.Sprintf("%v", s.Type.(*ast.Ident).Name),
+				Type: &openapi3.Types{fmt.Sprintf("%v", s.Type.(*ast.Ident).Name)},
 			}
 			return nil, schema
 		}
@@ -214,7 +214,7 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 	return nil, schema
 }
 
-func updateSchemAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) bool {
+func updateSchemaAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) bool {
 	if fieldSchema.Value == nil {
 		return false
 	}
@@ -309,7 +309,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 	case *ast.MapType:
 		// TODO is this default required correct ?
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
-			Type: "object",
+			Type: &openapi3.Types{"object"},
 		}), false
 	// TODO improve, we cannot handle array of arrays now
 	case *ast.ArrayType:
@@ -319,7 +319,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 			el = at.X
 		}
 		ident := el.(*ast.Ident)
-		Type := resolvePrimitiveType(ident.Name)
+		Type := &openapi3.Types{resolvePrimitiveType(ident.Name)}
 
 		//This is to prevent infinite recursion of array models
 		_, ok := declarationMap[ident.Name]
@@ -332,7 +332,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 		}
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
 			Items: fieldSchema,
-			Type:  "array",
+			Type:  &openapi3.Types{"array"},
 		}), false
 	// TODO add option to parse pointers as non optional
 	case *ast.StarExpr:
@@ -341,7 +341,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 	// TODO parse packages
 	case *ast.SelectorExpr:
 		return openapi3.NewSchemaRef("", &openapi3.Schema{
-			Type: "object",
+			Type: &openapi3.Types{"object"},
 		}), false
 	}
 
@@ -372,13 +372,13 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 				}
 			} else {
 				fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{
-					Type: Type,
+					Type: &openapi3.Types{Type},
 				})
 			}
 		}
 	} else {
 		fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{
-			Type: Type,
+			Type: &openapi3.Types{Type},
 		})
 	}
 
@@ -388,7 +388,7 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 func resolvePrimitive(f *ast.Field) (string, *openapi3.Schema) {
 	typ := f.Type.(*ast.Ident)
 	schema := openapi3.Schema{
-		Type: resolvePrimitiveType(typ.Name),
+		Type: &openapi3.Types{resolvePrimitiveType(typ.Name)},
 	}
 
 	if f.Tag != nil {
