@@ -6,8 +6,12 @@ import (
 	"reflect"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/nextap-solutions/openapi3Struct"
 )
+
+type Path struct {
+	Path string
+	Item openapi3.PathItem
+}
 
 func GetTypeName(v any) string {
 	if v == nil {
@@ -215,7 +219,7 @@ func (ep *EndpointDoc) GetPath() string {
 	return path
 }
 
-func (ep *EndpointDoc) BuildOpenAPiStruct() openapi3Struct.Path {
+func (ep *EndpointDoc) BuildOpenAPiStruct() Path {
 	item := openapi3.PathItem{}
 	op := ep.PathItem.Build()
 	switch ep.Method {
@@ -232,7 +236,7 @@ func (ep *EndpointDoc) BuildOpenAPiStruct() openapi3Struct.Path {
 	default:
 		panic(fmt.Sprintf("Unknown request method: %d", ep.Method))
 	}
-	return openapi3Struct.Path{
+	return Path{
 		Path: ep.GetPath(),
 		Item: item,
 	}

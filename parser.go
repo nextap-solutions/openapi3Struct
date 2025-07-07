@@ -10,6 +10,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/itchyny/json2yaml"
+	"github.com/nextap-solutions/openapi3Struct/domain"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -18,15 +19,10 @@ const (
 	swaggerSchemaDecoration = "swagger:model"
 )
 
-type Path struct {
-	Path string
-	Item openapi3.PathItem
-}
-
 type Parser struct {
 	T           openapi3.T
 	packagePath []string
-	paths       []Path
+	paths       []domain.Path
 }
 
 type Option func(p Parser) Parser
@@ -49,7 +45,8 @@ func WithPackagePaths(paths []string) Option {
 	}
 }
 
-func (p *Parser) AddPath(path Path) {
+func (p *Parser) AddPath(epDoc domain.EndpointDoc) {
+	path := epDoc.BuildOpenAPiStruct()
 	if p.T.Paths == nil {
 		p.T.Paths = &openapi3.Paths{}
 	}
