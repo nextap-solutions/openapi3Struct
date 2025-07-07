@@ -10,7 +10,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/itchyny/json2yaml"
-	"github.com/nextap-solutions/openapi3Struct/domain"
+	"github.com/nextap-solutions/openapi3Struct/legacy/domain"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -22,7 +22,7 @@ const (
 type Parser struct {
 	T           openapi3.T
 	packagePath []string
-	paths       []domain.Path
+	paths       []domain.ParsedPath
 }
 
 type Option func(p Parser) Parser
@@ -45,36 +45,37 @@ func WithPackagePaths(paths []string) Option {
 	}
 }
 
-func (p *Parser) AddPath(epDoc domain.EndpointDoc) {
-	path := epDoc.BuildOpenAPiStruct()
+func (p *Parser) AddPath(path domain.Path) {
 	if p.T.Paths == nil {
 		p.T.Paths = &openapi3.Paths{}
 	}
+
+	parsedPath := path.Parse()
 	// TODO improve this to add checks for all kinds of optional fields
-	storedPath := p.T.Paths.Value(path.Path)
+	storedPath := p.T.Paths.Value(parsedPath.Path)
 
 	if storedPath == nil {
-		p.T.Paths.Set(path.Path, &path.Item)
+		p.T.Paths.Set(parsedPath.Path, &parsedPath.Item)
 		return
 	}
 
-	if path.Item.Delete != nil {
-		storedPath.Delete = path.Item.Delete
+	if parsedPath.Item.Delete != nil {
+		storedPath.Delete = parsedPath.Item.Delete
 	}
-	if path.Item.Head != nil {
-		storedPath.Head = path.Item.Head
+	if parsedPath.Item.Head != nil {
+		storedPath.Head = parsedPath.Item.Head
 	}
-	if path.Item.Post != nil {
-		storedPath.Post = path.Item.Post
+	if parsedPath.Item.Post != nil {
+		storedPath.Post = parsedPath.Item.Post
 	}
-	if path.Item.Get != nil {
-		storedPath.Get = path.Item.Get
+	if parsedPath.Item.Get != nil {
+		storedPath.Get = parsedPath.Item.Get
 	}
-	if path.Item.Put != nil {
-		storedPath.Put = path.Item.Put
+	if parsedPath.Item.Put != nil {
+		storedPath.Put = parsedPath.Item.Put
 	}
 
-	p.T.Paths.Set(path.Path, storedPath)
+	p.T.Paths.Set(parsedPath.Path, storedPath)
 }
 
 func (p *Parser) SaveYamlToFile(path string) error {
