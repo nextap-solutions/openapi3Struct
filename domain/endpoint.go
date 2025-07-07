@@ -234,7 +234,7 @@ func (ep *EndpointDoc) BuildOpenAPiStruct() Path {
 	case http.MethodOptions:
 		item.Options = op
 	default:
-		panic(fmt.Sprintf("Unknown request method: %d", ep.Method))
+		panic(fmt.Sprintf("Unknown request method: %s", ep.Method))
 	}
 	return Path{
 		Path: ep.GetPath(),
