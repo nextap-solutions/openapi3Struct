@@ -1,8 +1,6 @@
 module github.com/nextap-solutions/openapi3Struct
 
-go 1.23.0
-
-toolchain go1.24.4
+go 1.24.4
 
 require github.com/getkin/kin-openapi v0.132.0
 
