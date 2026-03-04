@@ -203,12 +203,56 @@ func resolveSchema(schemas openapi3.Schemas, s ast.Spec, doc string, declaration
 				schema.Discriminator = &discriminator
 			}
 			return &s.Name.Name, schema
+		case *ast.ArrayType:
+			el := st.Elt
+			if star, ok := el.(*ast.StarExpr); ok {
+				el = star.X
+			}
+			var itemsRef *openapi3.SchemaRef
+			switch elt := el.(type) {
+			case *ast.Ident:
+				if _, ok := declarationMap[elt.Name]; ok {
+					itemsRef = openapi3.NewSchemaRef(createRef(elt.Name), nil)
+				} else {
+					itemsRef = openapi3.NewSchemaRef("", &openapi3.Schema{
+						Type: &openapi3.Types{resolvePrimitiveType(elt.Name)},
+					})
+				}
+			case *ast.SelectorExpr, *ast.MapType:
+				// External types (e.g. time.Time) and map elements: treat as object.
+				itemsRef = openapi3.NewSchemaRef("", &openapi3.Schema{
+					Type: &openapi3.Types{"object"},
+				})
+			default:
+				itemsRef = openapi3.NewSchemaRef("", &openapi3.Schema{
+					Type: &openapi3.Types{"object"},
+				})
+			}
+			schema.Type = &openapi3.Types{"array"}
+			schema.Items = itemsRef
+			return &s.Name.Name, schema
+		case *ast.MapType:
+			schema.Type = &openapi3.Types{"object"}
+			return &s.Name.Name, schema
+		case *ast.InterfaceType:
+			schema.Type = &openapi3.Types{"object"}
+			return &s.Name.Name, schema
 		case *ast.SelectorExpr:
 		default:
-			schema := openapi3.Schema{
-				Type: &openapi3.Types{fmt.Sprintf("%v", s.Type.(*ast.Ident).Name)},
+			ident, ok := s.Type.(*ast.Ident)
+			if !ok {
+				break
 			}
-			return nil, schema
+			resolved := resolvePrimitiveType(ident.Name)
+			schema := openapi3.Schema{
+				Type: &openapi3.Types{resolved},
+			}
+			if s.Assign.IsValid() {
+				// Type alias (e.g. type X = string): return without a name
+				// so it inlines the primitive type rather than creating a named schema.
+				return nil, schema
+			}
+			return &s.Name.Name, schema
 		}
 	}
 	return nil, schema
