@@ -469,3 +469,189 @@ type MapList []map[string]string
 		t.Fatalf("expected items type 'object' for map element, got %v", schema.Items.Value.Type)
 	}
 }
+
+// TestResolveField_CrossPackagePointerField tests that a field typed *pkg.Type
+// (StarExpr wrapping SelectorExpr) does not panic and resolves as an optional object.
+// Regression test for the StarExpr→SelectorExpr fall-through panic.
+func TestResolveField_CrossPackagePointerField_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	src := `package test
+import "time"
+type Outer struct {
+	Timestamp *time.Time ` + "`json:\"timestamp,omitempty\"`" + `
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse source: %v", err)
+	}
+
+	declMap := map[string]*ast.TypeSpec{}
+	var target *ast.TypeSpec
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			declMap[ts.Name.Name] = ts
+			target = ts
+		}
+	}
+	if target == nil {
+		t.Fatal("no type declaration found")
+	}
+
+	schemas := openapi3.Schemas{}
+	name, schema := resolveSchema(schemas, target, "", declMap)
+
+	if name == nil || *name != "Outer" {
+		t.Fatalf("expected name 'Outer', got %v", name)
+	}
+	prop, ok := schema.Properties["timestamp"]
+	if !ok {
+		t.Fatal("expected property 'timestamp'")
+	}
+	if prop.Value == nil || (*prop.Value.Type)[0] != "object" {
+		t.Fatalf("expected timestamp type 'object', got %v", prop.Value.Type)
+	}
+	// Pointer field must not be required.
+	for _, req := range schema.Required {
+		if req == "timestamp" {
+			t.Fatal("expected 'timestamp' to be optional (pointer type), but it was required")
+		}
+	}
+}
+
+// TestResolveField_CrossPackageDirectField tests that a field typed pkg.Type
+// (direct SelectorExpr, non-pointer) resolves as an object without panicking.
+func TestResolveField_CrossPackageDirectField_ReturnsObject(t *testing.T) {
+	t.Parallel()
+
+	src := `package test
+import "time"
+type Outer struct {
+	Timestamp time.Time ` + "`json:\"timestamp\"`" + `
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse source: %v", err)
+	}
+
+	declMap := map[string]*ast.TypeSpec{}
+	var target *ast.TypeSpec
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			declMap[ts.Name.Name] = ts
+			target = ts
+		}
+	}
+	if target == nil {
+		t.Fatal("no type declaration found")
+	}
+
+	schemas := openapi3.Schemas{}
+	name, schema := resolveSchema(schemas, target, "", declMap)
+
+	if name == nil || *name != "Outer" {
+		t.Fatalf("expected name 'Outer', got %v", name)
+	}
+	prop, ok := schema.Properties["timestamp"]
+	if !ok {
+		t.Fatal("expected property 'timestamp'")
+	}
+	if prop.Value == nil || (*prop.Value.Type)[0] != "object" {
+		t.Fatalf("expected timestamp type 'object', got %v", prop.Value.Type)
+	}
+}
+
+// TestResolveSchema_NestedStructAutoRegistered tests that when a struct field
+// references another local struct, that sub-struct is auto-registered in the
+// schemas map so $ref pointers in the output are valid.
+func TestResolveSchema_NestedStructAutoRegistered(t *testing.T) {
+	t.Parallel()
+
+	src := `package test
+type Inner struct {
+	Value string ` + "`json:\"value\"`" + `
+}
+type Outer struct {
+	Sub Inner ` + "`json:\"sub\"`" + `
+}
+`
+	// parseTypeSpec returns the last type (Outer) as target with both in declMap.
+	ts, declMap := parseTypeSpec(t, src)
+	schemas := openapi3.Schemas{}
+
+	name, schema := resolveSchema(schemas, ts, "", declMap)
+
+	if name == nil || *name != "Outer" {
+		t.Fatalf("expected name 'Outer', got %v", name)
+	}
+	sub, ok := schema.Properties["sub"]
+	if !ok {
+		t.Fatal("expected property 'sub'")
+	}
+	if sub.Ref != "#/components/schemas/Inner" {
+		t.Fatalf("expected sub to be $ref to Inner, got %q", sub.Ref)
+	}
+	// Inner must be auto-registered so the $ref is resolvable.
+	if _, ok := schemas["Inner"]; !ok {
+		t.Fatal("expected Inner to be auto-registered in schemas map")
+	}
+}
+
+// TestResolveSchema_NestedStructPointerAutoRegistered tests auto-registration
+// with a pointer field (*Inner).
+func TestResolveSchema_NestedStructPointerAutoRegistered(t *testing.T) {
+	t.Parallel()
+
+	src := `package test
+type Inner struct {
+	Value string ` + "`json:\"value\"`" + `
+}
+type Outer struct {
+	Sub *Inner ` + "`json:\"sub,omitempty\"`" + `
+}
+`
+	ts, declMap := parseTypeSpec(t, src)
+	schemas := openapi3.Schemas{}
+
+	name, schema := resolveSchema(schemas, ts, "", declMap)
+
+	if name == nil || *name != "Outer" {
+		t.Fatalf("expected name 'Outer', got %v", name)
+	}
+	sub, ok := schema.Properties["sub"]
+	if !ok {
+		t.Fatal("expected property 'sub'")
+	}
+	if sub.Ref != "#/components/schemas/Inner" {
+		t.Fatalf("expected sub to be $ref to Inner, got %q", sub.Ref)
+	}
+	if _, ok := schemas["Inner"]; !ok {
+		t.Fatal("expected Inner to be auto-registered in schemas map")
+	}
+	// Pointer field must be optional.
+	for _, req := range schema.Required {
+		if req == "sub" {
+			t.Fatal("expected 'sub' to be optional (pointer type), but it was required")
+		}
+	}
+}

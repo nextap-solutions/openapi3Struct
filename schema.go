@@ -346,6 +346,15 @@ func updateSchemaAttribute(fieldSchema *openapi3.SchemaRef, keyValue string) boo
 }
 
 func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarationMap map[string]*ast.TypeSpec) (*openapi3.SchemaRef, bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			fieldName := "<anonymous>"
+			if len(f.Names) > 0 {
+				fieldName = f.Names[0].Name
+			}
+			panic(fmt.Sprintf("resolveField panic on field %q (initial type %T, current type %T): %v", fieldName, f.Type, typ, r))
+		}
+	}()
 	// TODO add option to parse pointers as non optional
 	required := true
 	var fieldSchema *openapi3.SchemaRef
@@ -389,6 +398,13 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 		}), false
 	}
 
+	// *pkg.Type: StarExpr unwraps to SelectorExpr — handle it like a direct SelectorExpr.
+	if _, ok := typ.(*ast.SelectorExpr); ok {
+		return openapi3.NewSchemaRef("", &openapi3.Schema{
+			Type: &openapi3.Types{"object"},
+		}), required
+	}
+
 	ident := typ.(*ast.Ident)
 
 	Type := resolvePrimitiveType(ident.Name)
@@ -401,6 +417,9 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 		if ident.Obj != nil && ident.Obj.Decl != nil {
 			name, subSchema := resolveSchema(schemas, ident.Obj.Decl.(*ast.TypeSpec), doc, declarationMap)
 			if name != nil {
+				if _, exists := schemas[*name]; !exists {
+					schemas[*name] = openapi3.NewSchemaRef("", &subSchema)
+				}
 				fieldSchema = openapi3.NewSchemaRef(createRef(*name), nil)
 			} else {
 				fieldSchema = openapi3.NewSchemaRef("", &subSchema)
@@ -410,6 +429,9 @@ func resolveField(schemas openapi3.Schemas, f *ast.Field, typ ast.Expr, declarat
 			if ok {
 				name, subSchema := resolveSchema(schemas, decl, doc, declarationMap)
 				if name != nil {
+					if _, exists := schemas[*name]; !exists {
+						schemas[*name] = openapi3.NewSchemaRef("", &subSchema)
+					}
 					fieldSchema = openapi3.NewSchemaRef(createRef(*name), nil)
 				} else {
 					fieldSchema = openapi3.NewSchemaRef("", &subSchema)
